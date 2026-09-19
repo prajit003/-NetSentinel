@@ -16,6 +16,12 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/prajit003/-NetSentinel?style=flat-square&color=yellow)](https://github.com/prajit003/-NetSentinel/stargazers)
 
+<br/>
+
+![NetSentinel Dashboard — Overview](screenshots/dashboard-overview.png)
+
+> **Overview page** — Live traffic chart (18,331 packets), Threat Level ring (LOW), stat cards, and sidebar navigation running on localhost:8000
+
 </div>
 
 ---
@@ -181,6 +187,8 @@ NetSentinel/
 
 ### Overview Page
 The main dashboard shows four stat cards (Total Events, Port Scans, SYN Floods, ICMP Floods), a real-time packets-per-second chart, and a glowing **Threat Level Ring** that dynamically reflects the current risk level.
+
+![NetSentinel Dashboard Overview](screenshots/dashboard-overview.png)
 
 ### Events Page
 Full paginated table of security events with:
