@@ -1,556 +1,347 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>NetSentinel</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetSentinel — Security Operations Center</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
-
-    <link
-        rel="stylesheet"
-        href="/static/style.css"
-    >
-
-    <!-- Chart.js -->
+    <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 </head>
-
-
 <body>
 
-    <!-- =====================================================
-         HEADER
-    ====================================================== -->
+<!-- ═══════════════════════════════════════════════════════════
+     TOAST CONTAINER
+════════════════════════════════════════════════════════════ -->
+<div id="toast-container"></div>
 
-    <header class="header">
 
-        <div class="header-left">
+<!-- ═══════════════════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
 
-            <h1>🛡️ NetSentinel</h1>
+    <div class="sidebar-logo">
+        <span class="logo-icon">🛡️</span>
+        <span class="logo-text">NetSentinel</span>
+    </div>
 
-            <p>
-                Network Security Monitoring System
-            </p>
+    <nav class="sidebar-nav">
+        <a href="#overview"   class="nav-item active" data-section="overview">
+            <span class="nav-icon">⬡</span> Overview
+        </a>
+        <a href="#traffic"    class="nav-item" data-section="traffic">
+            <span class="nav-icon">◈</span> Live Traffic
+        </a>
+        <a href="#events"     class="nav-item" data-section="events">
+            <span class="nav-icon">◉</span> Events
+        </a>
+        <a href="#attackers"  class="nav-item" data-section="attackers">
+            <span class="nav-icon">⚠</span> Attackers
+        </a>
+    </nav>
 
+    <div class="sidebar-footer">
+        <div class="connection-status" id="conn-status">
+            <span class="conn-dot online"></span>
+            <span>Connected</span>
+        </div>
+        <div class="sidebar-version">v2.0</div>
+    </div>
+
+</aside>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════════════════════ -->
+<div class="main-wrapper">
+
+
+    <!-- ── TOP BAR ──────────────────────────────────────────── -->
+    <header class="topbar">
+
+        <div class="topbar-left">
+            <h1 class="page-title" id="page-title">Overview</h1>
+            <span class="page-subtitle">Real-time network security monitoring</span>
         </div>
 
+        <div class="topbar-right">
 
-        <div
-            id="system-status"
-            class="system-status"
-        >
+            <div class="threat-pill" id="threat-pill">
+                <span class="threat-dot" id="threat-dot"></span>
+                <span id="threat-label">Threat: LOW</span>
+            </div>
 
-            <span class="status-dot online"></span>
+            <div class="last-refresh" id="last-refresh">
+                Last refresh: --
+            </div>
 
-            System Online
+            <button class="refresh-btn" onclick="loadDashboard()">
+                <span id="refresh-icon">↻</span>
+            </button>
 
         </div>
 
     </header>
 
 
-    <!-- =====================================================
-         MAIN CONTENT
-    ====================================================== -->
+    <!-- ── PAGE: OVERVIEW ───────────────────────────────────── -->
+    <section class="page active" id="page-overview">
 
-    <main class="container">
+        <!-- Stat Cards -->
+        <div class="stat-row" id="overview">
+            <div class="stat-card" id="card-total">
+                <div class="stat-icon-wrap danger">⚠</div>
+                <div class="stat-body">
+                    <div class="stat-label">Total Events</div>
+                    <div class="stat-num" id="total-events">0</div>
+                </div>
+                <div class="stat-glow danger"></div>
+            </div>
 
+            <div class="stat-card" id="card-port">
+                <div class="stat-icon-wrap warning">◉</div>
+                <div class="stat-body">
+                    <div class="stat-label">Port Scans</div>
+                    <div class="stat-num" id="port-scans">0</div>
+                </div>
+                <div class="stat-glow warning"></div>
+            </div>
 
-        <!-- =================================================
-             SUMMARY CARDS
-        ================================================== -->
+            <div class="stat-card" id="card-syn">
+                <div class="stat-icon-wrap red">⚡</div>
+                <div class="stat-body">
+                    <div class="stat-label">SYN Floods</div>
+                    <div class="stat-num" id="syn-floods">0</div>
+                </div>
+                <div class="stat-glow red"></div>
+            </div>
 
-        <section class="stats-grid">
+            <div class="stat-card" id="card-icmp">
+                <div class="stat-icon-wrap purple">📡</div>
+                <div class="stat-body">
+                    <div class="stat-label">ICMP Floods</div>
+                    <div class="stat-num" id="icmp-floods">0</div>
+                </div>
+                <div class="stat-glow purple"></div>
+            </div>
+        </div>
 
+        <!-- Two-column: Chart + Threat Meter -->
+        <div class="two-col">
 
-            <!-- Total Security Events -->
-
-            <div class="stat-card">
-
-                <div class="stat-header">
-
-                    <span>
-                        Total Security Events
-                    </span>
-
-                    <span class="stat-icon">
-                        ⚠️
-                    </span>
-
+            <!-- Traffic Overview Chart -->
+            <div class="panel" id="traffic">
+                <div class="panel-head">
+                    <div>
+                        <h2>Live Traffic</h2>
+                        <p>Packets per second</p>
+                    </div>
+                    <span class="live-badge">● LIVE</span>
                 </div>
 
-                <div
-                    id="total-events"
-                    class="stat-value"
-                >
-                    0
+                <div class="traffic-pills">
+                    <div class="tpill">
+                        <span>Total</span>
+                        <strong id="total-packets">0</strong>
+                    </div>
+                    <div class="tpill">
+                        <span>TCP</span>
+                        <strong id="tcp-packets">0</strong>
+                    </div>
+                    <div class="tpill">
+                        <span>UDP</span>
+                        <strong id="udp-packets">0</strong>
+                    </div>
+                    <div class="tpill">
+                        <span>ICMP</span>
+                        <strong id="icmp-packets">0</strong>
+                    </div>
+                    <div class="tpill highlight">
+                        <span>Pkt/sec</span>
+                        <strong id="packets-per-second">0</strong>
+                    </div>
+                    <div class="tpill">
+                        <span>Bytes</span>
+                        <strong id="total-bytes">0 B</strong>
+                    </div>
+                </div>
+
+                <div class="chart-wrap">
+                    <canvas id="traffic-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Threat Meter -->
+            <div class="panel threat-panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Threat Level</h2>
+                        <p>Current system risk assessment</p>
+                    </div>
+                </div>
+
+                <div class="threat-meter-wrap">
+                    <div class="threat-ring" id="threat-ring">
+                        <div class="threat-ring-inner">
+                            <div class="threat-level-text" id="threat-level-text">LOW</div>
+                            <div class="threat-level-sub">THREAT LEVEL</div>
+                        </div>
+                    </div>
+
+                    <div class="threat-levels">
+                        <div class="tl-item low">
+                            <span class="tl-dot"></span>
+                            <span>Low</span>
+                            <span class="tl-desc">Normal activity</span>
+                        </div>
+                        <div class="tl-item medium">
+                            <span class="tl-dot"></span>
+                            <span>Medium</span>
+                            <span class="tl-desc">Suspicious activity</span>
+                        </div>
+                        <div class="tl-item high">
+                            <span class="tl-dot"></span>
+                            <span>High</span>
+                            <span class="tl-desc">Active attacks</span>
+                        </div>
+                        <div class="tl-item critical">
+                            <span class="tl-dot"></span>
+                            <span>Critical</span>
+                            <span class="tl-desc">Severe threat</span>
+                        </div>
+                    </div>
                 </div>
 
             </div>
 
+        </div>
 
-            <!-- Port Scans -->
-
-            <div class="stat-card">
-
-                <div class="stat-header">
-
-                    <span>
-                        Port Scan Attempts
-                    </span>
-
-                    <span class="stat-icon">
-                        🔍
-                    </span>
-
-                </div>
-
-                <div
-                    id="port-scans"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
+    </section>
 
 
-            <!-- SYN Floods -->
+    <!-- ── PAGE: EVENTS ─────────────────────────────────────── -->
+    <section class="page" id="page-events">
 
-            <div class="stat-card">
+        <div class="panel" id="events">
 
-                <div class="stat-header">
-
-                    <span>
-                        SYN Flood Attempts
-                    </span>
-
-                    <span class="stat-icon danger-icon">
-                        ⚡
-                    </span>
-
-                </div>
-
-                <div
-                    id="syn-floods"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
-
-
-            <!-- ICMP Floods -->
-
-            <div class="stat-card">
-
-                <div class="stat-header">
-
-                    <span>
-                        ICMP Flood Attempts
-                    </span>
-
-                    <span class="stat-icon danger-icon">
-                        📡
-                    </span>
-
-                </div>
-
-                <div
-                    id="icmp-floods"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
-
-
-        </section>
-
-
-        <!-- =================================================
-             LIVE NETWORK TRAFFIC
-        ================================================== -->
-
-        <section class="panel traffic-panel">
-
-            <div class="panel-header">
-
+            <div class="panel-head">
                 <div>
-
-                    <h2>
-                        Live Network Traffic
-                    </h2>
-
-                    <p>
-                        Real-time network activity
-                    </p>
-
+                    <h2>Security Events</h2>
+                    <p id="events-updated">Last updated: --</p>
                 </div>
-
-
-                <div
-                    id="traffic-updated"
-                    class="updated-time"
-                >
-                    Waiting for traffic...
+                <div class="panel-actions">
+                    <button class="btn btn-export" onclick="exportCSV()">⬇ Export CSV</button>
+                    <button class="btn btn-clear"  onclick="clearEvents()">🗑 Clear All</button>
                 </div>
-
             </div>
 
-
-            <!-- Traffic statistics -->
-
-            <div class="traffic-stats">
-
-
-                <div class="traffic-card">
-
-                    <span>
-                        Total Packets
-                    </span>
-
-                    <strong
-                        id="total-packets"
-                    >
-                        0
-                    </strong>
-
+            <!-- Filters -->
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label>Type</label>
+                    <select id="filter-type" onchange="applyFilters()">
+                        <option value="">All Types</option>
+                        <option value="PORT_SCAN">Port Scan</option>
+                        <option value="SYN_FLOOD">SYN Flood</option>
+                        <option value="ICMP_FLOOD">ICMP Flood</option>
+                    </select>
                 </div>
-
-
-                <div class="traffic-card">
-
-                    <span>
-                        TCP Packets
-                    </span>
-
-                    <strong
-                        id="tcp-packets"
-                    >
-                        0
-                    </strong>
-
+                <div class="filter-group">
+                    <label>Severity</label>
+                    <select id="filter-severity" onchange="applyFilters()">
+                        <option value="">All Severities</option>
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical</option>
+                    </select>
                 </div>
-
-
-                <div class="traffic-card">
-
-                    <span>
-                        UDP Packets
-                    </span>
-
-                    <strong
-                        id="udp-packets"
-                    >
-                        0
-                    </strong>
-
-                </div>
-
-
-                <div class="traffic-card">
-
-                    <span>
-                        ICMP Packets
-                    </span>
-
-                    <strong
-                        id="icmp-packets"
-                    >
-                        0
-                    </strong>
-
-                </div>
-
-
-                <div class="traffic-card">
-
-                    <span>
-                        Packets / Sec
-                    </span>
-
-                    <strong
-                        id="packets-per-second"
-                    >
-                        0
-                    </strong>
-
-                </div>
-
-
-                <div class="traffic-card">
-
-                    <span>
-                        Total Bytes
-                    </span>
-
-                    <strong
-                        id="total-bytes"
-                    >
-                        0 B
-                    </strong>
-
-                </div>
-
-
+                <span class="event-count-badge" id="events-count"></span>
             </div>
 
-
-            <!-- Traffic chart -->
-
-            <div class="chart-container">
-
-                <div class="chart-title">
-                    Packets per Second — Live
-                </div>
-
-                <canvas
-                    id="traffic-chart"
-                ></canvas>
-
+            <!-- Loading -->
+            <div id="events-loading" class="loading-row" style="display:none">
+                <div class="spinner"></div> Loading events…
             </div>
 
-        </section>
-
-
-        <!-- =================================================
-             SECURITY EVENTS
-        ================================================== -->
-
-        <section class="panel events-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h2>
-                        Security Events
-                    </h2>
-
-                    <p>
-                        Detected network security incidents
-                    </p>
-
-                </div>
-
-
-                <div class="events-actions">
-
-                    <span
-                        id="events-updated"
-                        class="updated-time"
-                    >
-                        Last updated: --
-                    </span>
-
-
-                    <button
-                        onclick="refreshEvents()"
-                        class="refresh-button"
-                    >
-                        🔄 Refresh
-                    </button>
-
-                    <button
-                        onclick="exportCSV()"
-                        class="export-button"
-                    >
-                        ⬇️ Export CSV
-                    </button>
-
-                    <button
-                        onclick="clearEvents()"
-                        class="clear-button"
-                    >
-                        🗑️ Clear All
-                    </button>
-
-                </div>
-
-            </div>
-
-
-            <!-- =================================================
-                 FILTERS
-            ================================================== -->
-
-            <div class="filters">
-
-                <label for="filter-type">Alert Type:</label>
-
-                <select
-                    id="filter-type"
-                    onchange="applyFilters()"
-                >
-                    <option value="">All</option>
-                    <option value="PORT_SCAN">Port Scan</option>
-                    <option value="SYN_FLOOD">SYN Flood</option>
-                    <option value="ICMP_FLOOD">ICMP Flood</option>
-                </select>
-
-
-                <label for="filter-severity">Severity:</label>
-
-                <select
-                    id="filter-severity"
-                    onchange="applyFilters()"
-                >
-                    <option value="">All</option>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="CRITICAL">Critical</option>
-                </select>
-
-                <span id="events-count" class="events-count"></span>
-
-            </div>
-
-
-            <!-- =================================================
-                 LOADING SPINNER
-            ================================================== -->
-
-            <div id="events-loading" class="loading-spinner" style="display:none;">
-                <div class="spinner"></div>
-                <span>Loading events...</span>
-            </div>
-
-
-            <!-- =================================================
-                 EVENTS TABLE
-            ================================================== -->
-
-            <div class="table-container">
-
+            <!-- Table -->
+            <div class="tbl-wrap">
                 <table>
-
                     <thead>
-
                         <tr>
-
-                            <th>
-                                ID
-                            </th>
-
-                            <th>
-                                TIME
-                            </th>
-
-                            <th>
-                                ALERT TYPE
-                            </th>
-
-                            <th>
-                                SOURCE IP
-                            </th>
-
-                            <th>
-                                RISK SCORE
-                            </th>
-
-                            <th>
-                                SEVERITY
-                            </th>
-
-                            <th>
-                                DETAILS
-                            </th>
-
+                            <th>#</th>
+                            <th>Timestamp</th>
+                            <th>Alert Type</th>
+                            <th>Source IP</th>
+                            <th>Risk</th>
+                            <th>Severity</th>
+                            <th>Details</th>
                         </tr>
-
                     </thead>
-
-
-                    <tbody
-                        id="events-body"
-                    >
-
-                        <tr>
-
-                            <td
-                                colspan="7"
-                                class="empty-state"
-                            >
-                                Loading security events...
-                            </td>
-
-                        </tr>
-
+                    <tbody id="events-body">
+                        <tr><td colspan="7" class="empty-cell">Loading…</td></tr>
                     </tbody>
-
                 </table>
-
             </div>
 
-
-            <!-- =================================================
-                 PAGINATION
-            ================================================== -->
-
-            <div class="pagination" id="pagination">
-
-                <button
-                    id="btn-prev"
-                    onclick="prevPage()"
-                    disabled
-                >
-                    ← Prev
-                </button>
-
-                <span id="page-info">Page 1</span>
-
-                <button
-                    id="btn-next"
-                    onclick="nextPage()"
-                    disabled
-                >
-                    Next →
-                </button>
-
+            <!-- Pagination -->
+            <div class="pagination">
+                <button id="btn-prev" onclick="prevPage()" disabled>← Prev</button>
+                <span id="page-info">Page 1 of 1</span>
+                <button id="btn-next" onclick="nextPage()" disabled>Next →</button>
             </div>
 
-        </section>
+        </div>
+    </section>
 
 
-    </main>
+    <!-- ── PAGE: ATTACKERS ───────────────────────────────────── -->
+    <section class="page" id="page-attackers">
+
+        <div class="panel" id="attackers">
+            <div class="panel-head">
+                <div>
+                    <h2>Top Attackers</h2>
+                    <p>Source IPs with most security events</p>
+                </div>
+            </div>
+
+            <div id="attackers-loading" class="loading-row" style="display:none">
+                <div class="spinner"></div> Loading…
+            </div>
+
+            <div class="tbl-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Source IP</th>
+                            <th>Total Events</th>
+                            <th>Port Scans</th>
+                            <th>SYN Floods</th>
+                            <th>ICMP Floods</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attackers-body">
+                        <tr><td colspan="7" class="empty-cell">No data yet</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </section>
 
 
-    <!-- =====================================================
-         FOOTER
-    ====================================================== -->
-
+    <!-- ── FOOTER ────────────────────────────────────────────── -->
     <footer class="footer">
-
-        <span>
-            NetSentinel © 2026
-        </span>
-
-        <span>
-            Network Security Monitoring
-        </span>
-
+        NetSentinel © 2026 &nbsp;·&nbsp; Network Security Monitoring System
     </footer>
 
+</div><!-- /main-wrapper -->
 
-    <!-- =====================================================
-         JAVASCRIPT
-    ====================================================== -->
-
-    <script src="/static/script.js"></script>
-
+<script src="/static/script.js"></script>
 </body>
-
 </html>

@@ -216,11 +216,47 @@ def get_stats():
     finally:
         connection.close()
 
+    # Threat level: based on recent high/critical events in last 10 mins
+    threat_level = "LOW"
+    try:
+        connection2 = get_connection()
+        cursor2     = connection2.cursor()
+        cursor2.execute("""
+            SELECT id, alert_type, details
+            FROM security_events
+            ORDER BY id DESC
+            LIMIT 50
+        """)
+        recent_rows = cursor2.fetchall()
+        connection2.close()
+
+        critical_count = 0
+        high_count     = 0
+        for r in recent_rows:
+            count = _parse_count(r["details"] or "", r["alert_type"])
+            risk  = calculate_risk(r["alert_type"], count)
+            if risk["severity"] == "CRITICAL":
+                critical_count += 1
+            elif risk["severity"] == "HIGH":
+                high_count += 1
+
+        if critical_count >= 3:
+            threat_level = "CRITICAL"
+        elif critical_count >= 1 or high_count >= 5:
+            threat_level = "HIGH"
+        elif high_count >= 1 or (port_scans + syn_floods + icmp_floods) > 5:
+            threat_level = "MEDIUM"
+        else:
+            threat_level = "LOW"
+    except Exception:
+        pass
+
     return {
-        "total_events": total_events,
-        "port_scans":   port_scans,
-        "syn_floods":   syn_floods,
-        "icmp_floods":  icmp_floods,
+        "total_events":  total_events,
+        "port_scans":    port_scans,
+        "syn_floods":    syn_floods,
+        "icmp_floods":   icmp_floods,
+        "threat_level":  threat_level,
     }
 
 
@@ -387,3 +423,52 @@ def clear_events():
 @app.get("/api/traffic")
 def get_traffic():
     return get_traffic_stats()
+
+
+# ============================================================
+# TOP ATTACKING IPs
+# ============================================================
+
+@app.get("/api/top-ips")
+def get_top_ips(limit: int = Query(default=10, ge=1, le=50)):
+    """Return the top attacking source IPs by total event count."""
+
+    connection = get_connection()
+    cursor     = connection.cursor()
+
+    rows = []
+
+    try:
+        cursor.execute("""
+            SELECT
+                source_ip,
+                COUNT(*)        AS total,
+                SUM(CASE WHEN alert_type = 'PORT_SCAN'  THEN 1 ELSE 0 END) AS port_scans,
+                SUM(CASE WHEN alert_type = 'SYN_FLOOD'  THEN 1 ELSE 0 END) AS syn_floods,
+                SUM(CASE WHEN alert_type = 'ICMP_FLOOD' THEN 1 ELSE 0 END) AS icmp_floods,
+                MAX(timestamp)  AS last_seen
+            FROM security_events
+            GROUP BY source_ip
+            ORDER BY total DESC
+            LIMIT ?
+        """, (limit,))
+
+        rows = cursor.fetchall()
+
+    except sqlite3.OperationalError:
+        rows = []
+
+    finally:
+        connection.close()
+
+    return [
+        {
+            "source_ip":   row["source_ip"],
+            "total":       row["total"],
+            "port_scans":  row["port_scans"],
+            "syn_floods":  row["syn_floods"],
+            "icmp_floods": row["icmp_floods"],
+            "last_seen":   row["last_seen"],
+        }
+        for row in rows
+    ]
