@@ -2,7 +2,7 @@ import time
 from collections import deque
 from threading import Lock
 
-from scapy.all import sniff, IP, TCP, UDP
+from scapy.all import sniff, IP, TCP, UDP, ICMP
 
 
 # ============================================================
@@ -10,13 +10,14 @@ from scapy.all import sniff, IP, TCP, UDP
 # ============================================================
 
 total_packets = 0
-tcp_packets = 0
-udp_packets = 0
-total_bytes = 0
+tcp_packets   = 0
+udp_packets   = 0
+icmp_packets  = 0
+total_bytes   = 0
 
 packet_times = deque(maxlen=300)
 
-history = deque(maxlen=30)
+history = deque(maxlen=60)   # keep 60 one-second data points
 
 lock = Lock()
 
@@ -24,14 +25,47 @@ capture_started = False
 
 
 # ============================================================
-# PACKET PROCESSING
+# PACKET RECORDING  (called from packet_capture.py)
+# ============================================================
+
+def record_packet(protocol, packet_size):
+    """
+    Record a single packet into the shared traffic counters.
+
+    Parameters
+    ----------
+    protocol    : str   One of "TCP", "UDP", "ICMP", "OTHER"
+    packet_size : int   Size of the packet in bytes
+    """
+
+    global total_packets, tcp_packets, udp_packets, icmp_packets, total_bytes
+
+    current_time = time.time()
+
+    with lock:
+
+        total_packets += 1
+        total_bytes   += packet_size
+        packet_times.append(current_time)
+
+        if protocol == "TCP":
+            tcp_packets  += 1
+
+        elif protocol == "UDP":
+            udp_packets  += 1
+
+        elif protocol == "ICMP":
+            icmp_packets += 1
+
+
+# ============================================================
+# PACKET PROCESSING  (used when traffic.py runs capture itself)
 # ============================================================
 
 def process_packet(packet):
-    global total_packets
-    global tcp_packets
-    global udp_packets
-    global total_bytes
+    """Process a packet captured directly by this module."""
+
+    global total_packets, tcp_packets, udp_packets, icmp_packets, total_bytes
 
     if IP not in packet:
         return
@@ -41,16 +75,17 @@ def process_packet(packet):
     with lock:
 
         total_packets += 1
-
-        total_bytes += len(packet)
-
+        total_bytes   += len(packet)
         packet_times.append(current_time)
 
         if TCP in packet:
-            tcp_packets += 1
+            tcp_packets  += 1
 
         elif UDP in packet:
-            udp_packets += 1
+            udp_packets  += 1
+
+        elif ICMP in packet:
+            icmp_packets += 1
 
 
 # ============================================================
@@ -58,9 +93,9 @@ def process_packet(packet):
 # ============================================================
 
 def calculate_packets_per_second():
+    """Return the number of packets captured in the last second."""
 
-    current_time = time.time()
-
+    current_time  = time.time()
     one_second_ago = current_time - 1
 
     with lock:
@@ -75,17 +110,16 @@ def calculate_packets_per_second():
 
 
 # ============================================================
-# CREATE HISTORY POINT
+# UPDATE HISTORY RING BUFFER
 # ============================================================
 
 def update_history():
-
-    current_time = time.time()
+    """Append a new data point to the packets-per-second history."""
 
     pps = calculate_packets_per_second()
 
     point = {
-        "time": time.strftime("%H:%M:%S"),
+        "time":               time.strftime("%H:%M:%S"),
         "packets_per_second": pps
     }
 
@@ -98,33 +132,36 @@ def update_history():
 # ============================================================
 
 def get_traffic_stats():
-
-    global history
+    """Return a snapshot of current traffic statistics."""
 
     pps = calculate_packets_per_second()
 
-    # Add a new history point
     update_history()
 
     with lock:
 
         stats = {
-            "total_packets": total_packets,
-            "tcp_packets": tcp_packets,
-            "udp_packets": udp_packets,
-            "total_bytes": total_bytes,
+            "total_packets":      total_packets,
+            "tcp_packets":        tcp_packets,
+            "udp_packets":        udp_packets,
+            "icmp_packets":       icmp_packets,
+            "total_bytes":        total_bytes,
             "packets_per_second": pps,
-            "history": list(history)
+            "history":            list(history)
         }
 
     return stats
 
 
 # ============================================================
-# START PACKET CAPTURE
+# START PACKET CAPTURE  (standalone mode)
 # ============================================================
 
 def start_capture():
+    """
+    Start sniffing packets using Scapy.
+    Intended to run in a background daemon thread.
+    """
 
     global capture_started
 
@@ -141,13 +178,14 @@ def start_capture():
     print()
 
     sniff(
+        filter="ip",          # only IP packets
         prn=process_packet,
         store=False
     )
 
 
 # ============================================================
-# TEST
+# STANDALONE TEST
 # ============================================================
 
 if __name__ == "__main__":
@@ -156,10 +194,10 @@ if __name__ == "__main__":
 
     for i in range(10):
 
-        fake_packet_time = time.time()
+        fake_time = time.time()
 
         with lock:
-            packet_times.append(fake_packet_time)
+            packet_times.append(fake_time)
 
         time.sleep(0.1)
 

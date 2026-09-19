@@ -12,6 +12,8 @@
 
     <title>NetSentinel</title>
 
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+
     <link
         rel="stylesheet"
         href="/static/style.css"
@@ -33,7 +35,7 @@
 
         <div class="header-left">
 
-            <h1>NetSentinel</h1>
+            <h1>🛡️ NetSentinel</h1>
 
             <p>
                 Network Security Monitoring System
@@ -81,7 +83,7 @@
                     </span>
 
                     <span class="stat-icon">
-                        ⚠
+                        ⚠️
                     </span>
 
                 </div>
@@ -107,7 +109,7 @@
                     </span>
 
                     <span class="stat-icon">
-                        ◉
+                        🔍
                     </span>
 
                 </div>
@@ -140,6 +142,32 @@
 
                 <div
                     id="syn-floods"
+                    class="stat-value"
+                >
+                    0
+                </div>
+
+            </div>
+
+
+            <!-- ICMP Floods -->
+
+            <div class="stat-card">
+
+                <div class="stat-header">
+
+                    <span>
+                        ICMP Flood Attempts
+                    </span>
+
+                    <span class="stat-icon danger-icon">
+                        📡
+                    </span>
+
+                </div>
+
+                <div
+                    id="icmp-floods"
                     class="stat-value"
                 >
                     0
@@ -235,6 +263,21 @@
                 <div class="traffic-card">
 
                     <span>
+                        ICMP Packets
+                    </span>
+
+                    <strong
+                        id="icmp-packets"
+                    >
+                        0
+                    </strong>
+
+                </div>
+
+
+                <div class="traffic-card">
+
+                    <span>
                         Packets / Sec
                     </span>
 
@@ -270,7 +313,7 @@
             <div class="chart-container">
 
                 <div class="chart-title">
-                    Packets per Second
+                    Packets per Second — Live
                 </div>
 
                 <canvas
@@ -317,11 +360,72 @@
                         onclick="refreshEvents()"
                         class="refresh-button"
                     >
-                        Refresh
+                        🔄 Refresh
+                    </button>
+
+                    <button
+                        onclick="exportCSV()"
+                        class="export-button"
+                    >
+                        ⬇️ Export CSV
+                    </button>
+
+                    <button
+                        onclick="clearEvents()"
+                        class="clear-button"
+                    >
+                        🗑️ Clear All
                     </button>
 
                 </div>
 
+            </div>
+
+
+            <!-- =================================================
+                 FILTERS
+            ================================================== -->
+
+            <div class="filters">
+
+                <label for="filter-type">Alert Type:</label>
+
+                <select
+                    id="filter-type"
+                    onchange="applyFilters()"
+                >
+                    <option value="">All</option>
+                    <option value="PORT_SCAN">Port Scan</option>
+                    <option value="SYN_FLOOD">SYN Flood</option>
+                    <option value="ICMP_FLOOD">ICMP Flood</option>
+                </select>
+
+
+                <label for="filter-severity">Severity:</label>
+
+                <select
+                    id="filter-severity"
+                    onchange="applyFilters()"
+                >
+                    <option value="">All</option>
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                </select>
+
+                <span id="events-count" class="events-count"></span>
+
+            </div>
+
+
+            <!-- =================================================
+                 LOADING SPINNER
+            ================================================== -->
+
+            <div id="events-loading" class="loading-spinner" style="display:none;">
+                <div class="spinner"></div>
+                <span>Loading events...</span>
             </div>
 
 
@@ -388,6 +492,33 @@
                     </tbody>
 
                 </table>
+
+            </div>
+
+
+            <!-- =================================================
+                 PAGINATION
+            ================================================== -->
+
+            <div class="pagination" id="pagination">
+
+                <button
+                    id="btn-prev"
+                    onclick="prevPage()"
+                    disabled
+                >
+                    ← Prev
+                </button>
+
+                <span id="page-info">Page 1</span>
+
+                <button
+                    id="btn-next"
+                    onclick="nextPage()"
+                    disabled
+                >
+                    Next →
+                </button>
 
             </div>
 

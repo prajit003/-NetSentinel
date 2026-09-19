@@ -3,3 +3,11 @@ __pycache__/
 *.pyc
 logs/*.db
 logs/*.log
+
+logs/*.db
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/

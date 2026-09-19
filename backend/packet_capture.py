@@ -1,111 +1,93 @@
-from scapy.all import sniff, IP, TCP, UDP
+from scapy.all import sniff, IP, TCP, UDP, ICMP
 from datetime import datetime
 
-from .detector import detect_port_scan, detect_syn_flood
+from .detector import detect_port_scan, detect_syn_flood, detect_icmp_flood
 from .traffic import record_packet
 
 
-def process_packet(packet):
+# ============================================================
+# PACKET PROCESSOR
+# ============================================================
 
-    # Make sure packet contains IP information
+def process_packet(packet):
+    """
+    Analyse a single captured packet:
+      1. Record it in the traffic statistics counters.
+      2. Run security detectors as appropriate.
+    """
+
     if IP not in packet:
         return
 
-    source_ip = packet[IP].src
-    destination_ip = packet[IP].dst
+    source_ip   = packet[IP].src
     packet_size = len(packet)
 
+    # --------------------------------------------------
     # Determine protocol
+    # --------------------------------------------------
+
     if TCP in packet:
         protocol = "TCP"
 
     elif UDP in packet:
         protocol = "UDP"
 
+    elif ICMP in packet:
+        protocol = "ICMP"
+
     else:
         protocol = "OTHER"
 
-
-    # ========================================
+    # --------------------------------------------------
     # Record traffic statistics
-    # ========================================
+    # --------------------------------------------------
 
-    record_packet(
-        protocol,
-        packet_size
-    )
+    record_packet(protocol, packet_size)
 
-
-    # ========================================
-    # Display packet information
-    # ========================================
-
-    print("----------------------------------------")
-
-    print(
-        f"Time        : "
-        f"{datetime.now().strftime('%H:%M:%S')}"
-    )
-
-    print(
-        f"Protocol    : {protocol}"
-    )
-
-    print(
-        f"Source      : {source_ip}"
-    )
-
-    print(
-        f"Destination : {destination_ip}"
-    )
-
-    print(
-        f"Packet Size : {packet_size} bytes"
-    )
-
-
-    # ========================================
-    # Port Scan Detection
-    # ========================================
+    # --------------------------------------------------
+    # TCP-specific detections
+    # --------------------------------------------------
 
     if TCP in packet:
 
         destination_port = packet[TCP].dport
 
-        detect_port_scan(
-            source_ip,
-            destination_port
-        )
+        # Port scan detection
+        detect_port_scan(source_ip, destination_port)
+
+        # SYN flood detection (SYN without ACK)
+        if packet[TCP].flags == "S":
+            detect_syn_flood(source_ip)
+
+    # --------------------------------------------------
+    # ICMP flood detection
+    # --------------------------------------------------
+
+    elif ICMP in packet:
+        detect_icmp_flood(source_ip)
 
 
-        # ====================================
-        # SYN Flood Detection
-        # ====================================
-
-        flags = packet[TCP].flags
-
-        # SYN packet without ACK
-        if flags == "S":
-
-            detect_syn_flood(
-                source_ip
-            )
-
+# ============================================================
+# START CAPTURE
+# ============================================================
 
 def start_capture():
+    """
+    Begin sniffing network traffic.
+    Runs in a daemon thread started by main.py.
+    """
 
     print("=================================")
     print("       NetSentinel Started")
     print("=================================")
-
     print("Monitoring network traffic...")
     print("Press CTRL+C to stop.")
     print()
 
-
     try:
 
         sniff(
+            filter="ip",       # skip non-IP frames for efficiency
             prn=process_packet,
             store=False
         )
@@ -116,6 +98,9 @@ def start_capture():
         print("Stopping NetSentinel...")
 
 
-if __name__ == "__main__":
+# ============================================================
+# STANDALONE ENTRY POINT
+# ============================================================
 
+if __name__ == "__main__":
     start_capture()

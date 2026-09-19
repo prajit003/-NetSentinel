@@ -1,146 +1,228 @@
 from collections import defaultdict
 import time
+import threading
 
-from .database import create_database
-from .database import save_security_event
+from .database import create_database, save_security_event
 
 
-# Create the database when the detector starts
+# Create the database when the detector module is first loaded
 create_database()
+
+
+# ============================================================
+# CONFIGURABLE THRESHOLDS
+# ============================================================
+
+PORT_SCAN_PORT_THRESHOLD  = 10   # distinct ports within window
+PORT_SCAN_TIME_WINDOW     = 10   # seconds
+
+SYN_FLOOD_COUNT_THRESHOLD = 20   # SYN packets within window
+SYN_FLOOD_TIME_WINDOW     = 5    # seconds
+
+ICMP_FLOOD_COUNT_THRESHOLD = 30  # ICMP packets within window
+ICMP_FLOOD_TIME_WINDOW     = 5   # seconds
+
+
+# ============================================================
+# THREAD-SAFE SHARED STATE
+# ============================================================
+
+_lock = threading.Lock()
 
 
 # --------------------------------------------------
 # Port Scan Tracking
 # --------------------------------------------------
 
-connections = defaultdict(set)
-
-start_time = {}
+_connections  = defaultdict(set)
+_ps_start     = {}
 
 
 # --------------------------------------------------
 # SYN Flood Tracking
 # --------------------------------------------------
 
-syn_count = defaultdict(int)
+_syn_count = defaultdict(int)
+_syn_start = {}
 
-syn_start_time = {}
+
+# --------------------------------------------------
+# ICMP Flood Tracking
+# --------------------------------------------------
+
+_icmp_count = defaultdict(int)
+_icmp_start = {}
 
 
-def log_security_alert(alert_type, source_ip, details):
-    """
-    Save a security alert to the database.
-    """
+# ============================================================
+# INTERNAL HELPERS
+# ============================================================
 
-    save_security_event(
-        alert_type,
-        source_ip,
-        details
-    )
+def _log_alert(alert_type, source_ip, details):
+    """Persist a security alert to the database."""
+    save_security_event(alert_type, source_ip, details)
 
+
+# ============================================================
+# PORT SCAN DETECTION
+# ============================================================
 
 def detect_port_scan(source_ip, destination_port):
     """
     Detect a possible TCP port scan.
 
-    10 or more different destination ports
-    within 10 seconds triggers an alert.
+    Triggers when a single source IP contacts
+    PORT_SCAN_PORT_THRESHOLD or more distinct destination ports
+    within PORT_SCAN_TIME_WINDOW seconds.
     """
 
     current_time = time.time()
 
-    # Start tracking a new IP
-    if source_ip not in start_time:
-        start_time[source_ip] = current_time
+    with _lock:
 
-    # Add destination port
-    connections[source_ip].add(destination_port)
+        if source_ip not in _ps_start:
+            _ps_start[source_ip] = current_time
 
-    elapsed_time = current_time - start_time[source_ip]
+        _connections[source_ip].add(destination_port)
 
-    # 10-second detection window
-    if elapsed_time <= 10:
+        elapsed = current_time - _ps_start[source_ip]
 
-        number_of_ports = len(connections[source_ip])
+        if elapsed <= PORT_SCAN_TIME_WINDOW:
 
-        if number_of_ports >= 10:
+            num_ports = len(_connections[source_ip])
 
-            ports = connections[source_ip].copy()
+            if num_ports >= PORT_SCAN_PORT_THRESHOLD:
 
-            print("\n" + "=" * 50)
-            print("SECURITY ALERT")
-            print("=" * 50)
-            print("Possible TCP port scan detected")
-            print(f"Source IP       : {source_ip}")
-            print(f"Ports contacted : {number_of_ports}")
-            print(f"Ports           : {sorted(ports)}")
-            print("=" * 50 + "\n")
+                ports = sorted(_connections[source_ip])
 
-            # Save to database
-            log_security_alert(
-                "PORT_SCAN",
-                source_ip,
-                f"PORT_COUNT={len(ports)} PORTS={sorted(ports)}"
-            )
+                print("\n" + "=" * 50)
+                print("SECURITY ALERT: PORT SCAN")
+                print("=" * 50)
+                print(f"Source IP       : {source_ip}")
+                print(f"Ports contacted : {num_ports}")
+                print(f"Ports           : {ports}")
+                print("=" * 50 + "\n")
 
-            # Reset
-            connections[source_ip].clear()
-            start_time[source_ip] = current_time
+                _log_alert(
+                    "PORT_SCAN",
+                    source_ip,
+                    f"PORT_COUNT={num_ports} PORTS={ports}"
+                )
 
-    else:
+                # Reset window
+                _connections[source_ip].clear()
+                _ps_start[source_ip] = current_time
 
-        connections[source_ip].clear()
-        connections[source_ip].add(destination_port)
-        start_time[source_ip] = current_time
+        else:
 
+            # Window expired — start fresh
+            _connections[source_ip] = {destination_port}
+            _ps_start[source_ip] = current_time
+
+
+# ============================================================
+# SYN FLOOD DETECTION
+# ============================================================
 
 def detect_syn_flood(source_ip):
     """
-    Detect repeated TCP SYN packets.
+    Detect repeated TCP SYN packets (SYN flood).
 
-    20 or more SYN packets within 5 seconds
-    triggers an alert.
+    Triggers when SYN_FLOOD_COUNT_THRESHOLD or more SYN packets
+    are received from one IP within SYN_FLOOD_TIME_WINDOW seconds.
     """
 
     current_time = time.time()
 
-    # Start tracking a new IP
-    if source_ip not in syn_start_time:
-        syn_start_time[source_ip] = current_time
+    with _lock:
 
-    # Increase SYN counter
-    syn_count[source_ip] += 1
+        if source_ip not in _syn_start:
+            _syn_start[source_ip] = current_time
 
-    elapsed_time = current_time - syn_start_time[source_ip]
+        _syn_count[source_ip] += 1
 
-    # 5-second detection window
-    if elapsed_time <= 5:
+        elapsed = current_time - _syn_start[source_ip]
 
-        if syn_count[source_ip] >= 20:
+        if elapsed <= SYN_FLOOD_TIME_WINDOW:
 
-            count = syn_count[source_ip]
+            count = _syn_count[source_ip]
 
-            print("\n" + "=" * 50)
-            print("SECURITY ALERT")
-            print("=" * 50)
-            print("Possible SYN flooding detected")
-            print(f"Source IP : {source_ip}")
-            print(f"SYN Count : {count}")
-            print("Time      : 5 seconds")
-            print("=" * 50 + "\n")
+            if count >= SYN_FLOOD_COUNT_THRESHOLD:
 
-            # Save to database
-            log_security_alert(
-                "SYN_FLOOD",
-                source_ip,
-                f"SYN_COUNT={count} WINDOW=5_SECONDS"
-            )
+                print("\n" + "=" * 50)
+                print("SECURITY ALERT: SYN FLOOD")
+                print("=" * 50)
+                print(f"Source IP : {source_ip}")
+                print(f"SYN Count : {count}")
+                print(f"Window    : {SYN_FLOOD_TIME_WINDOW} seconds")
+                print("=" * 50 + "\n")
 
-            # Reset
-            syn_count[source_ip] = 0
-            syn_start_time[source_ip] = current_time
+                _log_alert(
+                    "SYN_FLOOD",
+                    source_ip,
+                    f"SYN_COUNT={count} WINDOW={SYN_FLOOD_TIME_WINDOW}_SECONDS"
+                )
 
-    else:
+                # Reset window
+                _syn_count[source_ip] = 0
+                _syn_start[source_ip] = current_time
 
-        syn_count[source_ip] = 1
-        syn_start_time[source_ip] = current_time
+        else:
+
+            # Window expired — start fresh
+            _syn_count[source_ip] = 1
+            _syn_start[source_ip] = current_time
+
+
+# ============================================================
+# ICMP FLOOD DETECTION
+# ============================================================
+
+def detect_icmp_flood(source_ip):
+    """
+    Detect an ICMP ping flood.
+
+    Triggers when ICMP_FLOOD_COUNT_THRESHOLD or more ICMP packets
+    are received from one IP within ICMP_FLOOD_TIME_WINDOW seconds.
+    """
+
+    current_time = time.time()
+
+    with _lock:
+
+        if source_ip not in _icmp_start:
+            _icmp_start[source_ip] = current_time
+
+        _icmp_count[source_ip] += 1
+
+        elapsed = current_time - _icmp_start[source_ip]
+
+        if elapsed <= ICMP_FLOOD_TIME_WINDOW:
+
+            count = _icmp_count[source_ip]
+
+            if count >= ICMP_FLOOD_COUNT_THRESHOLD:
+
+                print("\n" + "=" * 50)
+                print("SECURITY ALERT: ICMP FLOOD")
+                print("=" * 50)
+                print(f"Source IP   : {source_ip}")
+                print(f"ICMP Count  : {count}")
+                print(f"Window      : {ICMP_FLOOD_TIME_WINDOW} seconds")
+                print("=" * 50 + "\n")
+
+                _log_alert(
+                    "ICMP_FLOOD",
+                    source_ip,
+                    f"ICMP_COUNT={count} WINDOW={ICMP_FLOOD_TIME_WINDOW}_SECONDS"
+                )
+
+                # Reset window
+                _icmp_count[source_ip] = 0
+                _icmp_start[source_ip] = current_time
+
+        else:
+
+            # Window expired — start fresh
+            _icmp_count[source_ip] = 1
+            _icmp_start[source_ip] = current_time
